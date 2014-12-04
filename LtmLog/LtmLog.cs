@@ -6,7 +6,7 @@
  * 
  * --------------------------------------------------------------------------------------------------*/
 
-using UnityEngine;
+
 using System.Collections.Generic;
 
 namespace Ltm
@@ -31,6 +31,7 @@ namespace Ltm
 
 		public ILog(LOG_TYPE typ, string id)
 		{
+			_type = typ;
 			_id = id;
 		}
 
@@ -62,8 +63,10 @@ namespace Ltm
 			{
 				case LOG_TYPE.Unity:
 				{
+#if UNITY_EDITOR
 				 	log = new UnityLog(id);
 				 	Add(log);	
+#endif
 				}
 				break;
 			}
@@ -73,12 +76,16 @@ namespace Ltm
 
 
 
-		
+
+
+
+		// 寄生类需要实现的接口
 		public abstract void Log(params object[] objs);
 		public abstract void LogWarning(params object[] objs);
 		public abstract void LogError(params object[] objs);
 
 	}
+
 
 	public class UnityLog : ILog
 	{
@@ -89,18 +96,24 @@ namespace Ltm
 
 		public override void Log(params object[] objs)
 		{
+#if UNITY_EDITOR
 			if (_valid && objs.Length > 0 )
-				Debug.Log(objs[0]);
+				UnityEngine.Debug.Log(objs[0]);
+#endif
 		}
 		public override void LogWarning( params object[] objs)
 		{
+#if UNITY_EDITOR
 			if (_valid && objs.Length >0)
-				Debug.LogWarning(objs[0]);
+				UnityEngine.Debug.LogWarning(objs[0]);
+#endif
 		}
 		public override void LogError(params object[] objs)
 		{
+#if UNITY_EDITOR
 			if (_valid && objs.Length >0)
-				Debug.LogError(objs[0]);
+				UnityEngine.Debug.LogError(objs[0]);
+#endif
 		}
 
 	}
