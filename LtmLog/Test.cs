@@ -9,7 +9,7 @@ public class loca : MonoBehaviour {
 	
 
 		LtmLog.Init(LOG_TYPE.Unity);
-		LtmLog.WriteLog("test1", "1", LOG_LV.Usual, 1);
+		LtmLog.WriteLog("test1", "1", LOG_LV.Usual, FILE_IN.Yes);
 		LtmLog.WriteLog("test2");
 
 		LtmLog.Disable("1");
