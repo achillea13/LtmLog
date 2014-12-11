@@ -4,6 +4,30 @@
  *  	author 	:Liutangming
  *  	desc 	:Simple Log System
  * 
+ * 
+ *  	Interface 	:
+ * 
+ *  		初始化日志的类型
+ *  		LtmLog:Init(LOG_TYPE typ) 	
+ * 
+ *  		判断指定类型是否存在环境
+ *  		LtmLog:IsEnvSuit(LOG_TYPE typ)
+ * 
+ *  		信息写入日志
+ *  		LtmLog:WriteLog(object msg, string id = null, LOG_LV lv = LOG_LV.Usual, FILE_IN fileIn = FILE_IN.Null )
+ * 
+ *  		禁用某个ID的日志系列
+ * 		 	LtmLog:Disable(string id)
+ * 
+ *  		禁用所有的日志系列，不包括default系列
+ *  		LtmLog:DisableAll()
+ * 
+ *  		启用某个ID的日志系列
+ *  		LtmLog:Enable(string id)
+ * 
+ *  		启用所有的日志系列
+ *  		LtmLog:EnableAll()
+ * 
  * --------------------------------------------------------------------------------------------------*/
 
 using System.IO;
@@ -19,6 +43,7 @@ namespace Ltm
 		Null = 0, 							// null
 		Unity = 1, 							// unity环境下日志类型
 		Txt, 								// 录入文件日志类型
+		Console, 							// c#控制台输出
 	}
 
 	// 日志等级
@@ -29,8 +54,32 @@ namespace Ltm
 		Error, 								// 错误
 	}
 
+	// 返回枚举
+	public enum ERR_CODE
+	{
+		OK = 0, 							// 正确
+		Unknow, 							// 未知错误
+		EnvNotExist, 						// 平台不匹配
+		InitAlready, 						// 已经初始化
+	}
+
+	// 是否写入文件
+	public enum FILE_IN
+	{
+		Null = 0, 								// 保持不变
+		Yes, 								// 写入
+		No, 								// 不写入
+	}
+
 	public static class LtmLog
 	{
+
+
+		// 是否已经初始化
+		private static bool s_inited = false;
+
+		// 是否开启日志的时间采集
+		private static bool s_timeRecord = true;
 	
 		// 管理所有Log对象的集合
 		private static Hashtable s_tabLogs = new Hashtable();
@@ -66,25 +115,69 @@ namespace Ltm
 					log = new FileLog(id);
 				}
 				break;
+
+				case LOG_TYPE.Console:
+				{
+				 	log = new ConsoleLog(id);
+				}
+				break;
 			}
 
 			return log;
 		}
 
 		// 指定一些参数
-		public static void Init( LOG_TYPE typ )
+		public static ERR_CODE Init( LOG_TYPE typ, bool timeRecord = true )
 		{
-			_type = typ;
-			string key = GenKey(typ,"default");
+			if ( s_inited )
+				return ERR_CODE.InitAlready;
+
+			bool bEnvSuit = IsEnvSuit(typ);
+			// 根据环境指定
+			if ( bEnvSuit )
+				_type = typ;
+			else
+				_type = LOG_TYPE.Txt;
+
+			string key = GenKey(_type,"default");
 			if ( s_tabLogsDefault.ContainsKey(key) == false )
 			 	s_tabLogsDefault[key] = GenLog(_type,"default");
 
+			s_timeRecord = timeRecord;
+
+			s_inited = true;
+
+			return bEnvSuit == true ? ERR_CODE.OK : ERR_CODE.EnvNotExist;
+
+		}
+
+		// 判断环境是否存在
+		public static bool IsEnvSuit( LOG_TYPE typ )
+		{
+			switch( typ )
+			{
+				case LOG_TYPE.Unity:
+				{
+#if UNITY_EDITOR
+				return true;
+
+#else
+				return false;
+#endif
+
+				}
+				break;
+
+
+			}
+
+			return true;
 		}
 
 
 		// 静态的日志写入接口
-		// fileIn 	: 0:重设为no     1:重设为yes    其他值：不变
-		public static void WriteLog(object msg, string id = null, LOG_LV lv = LOG_LV.Usual, int fileIn = 2 )
+		// fileIn 	: 是否写入文件
+		public static void WriteLog(object msg, string id = null, LOG_LV lv = LOG_LV.Usual, FILE_IN fileIn = FILE_IN.Null )
 		{
 			ILog log = null;
 			if ( id == null ) 
@@ -106,12 +199,12 @@ namespace Ltm
 
 			switch( fileIn )
 			{
-				case 0:
+				case FILE_IN.No:
 				{
 					log.SetFileIn(false);
 				}
 				break;
-				case 1:
+				case FILE_IN.Yes:
 				{
 					log.SetFileIn(true);
 				}
@@ -119,9 +212,53 @@ namespace Ltm
 	
 			}
 
-			log.WriteLogDo(msg, lv);
+			log.WriteLogDo(MsgConstruct(msg, lv), lv);
 			return;
 		}
+
+
+		private static string MsgConstruct( object msg, LOG_LV lv )
+		{
+			string res = "";
+			string level = "";
+			string ti = "";
+
+			switch( lv )
+			{
+				case LOG_LV.Usual:
+				{
+				 	level = "[usual]";
+				}
+				break;
+
+				case LOG_LV.Warning:
+				{
+				 	level = "[warning]";
+				}
+				break;
+
+				case LOG_LV.Error:
+				{
+					level = "[error]";
+				}
+				break;
+			}
+
+			if ( s_timeRecord )
+			{
+				ti = GetLocalTimeStr();
+			}
+
+			res = level + "  " + msg + "          " + ti;
+
+			return res;
+		}
+
+		private static string GetLocalTimeStr()
+		{
+			return System.DateTime.Now.ToString();
+		}
+
 
 		private static void Turn( string id, bool bTurn )
 		{
@@ -256,10 +393,12 @@ namespace Ltm
 				}
 			}
 
+
 			// 寄生类需要内部实现的录入接口
 			protected abstract void Log(object obj);
 			protected abstract void LogWarning(object obj);
 			protected abstract void LogError(object obj);
+
 		}
 
 
@@ -296,9 +435,39 @@ namespace Ltm
 				UnityEngine.Debug.LogError(obj);
 				#endif
 			}
+
 		}
 /*-------------------------------	Unity3D type log end --------------------------------------------
  * -------------------------------------------------------------------------------------------------*/
+
+
+
+/*--------------------------------------------------------------------------------------------------
+ * ------------------------------- 	Console type log 	--------------------------------------------*/
+		// 用于Unity编辑器下的Log类型
+		private class ConsoleLog : ILog
+		{
+			
+			public ConsoleLog(string id) : base(LOG_TYPE.Console, id)
+			{
+			}
+			
+			protected override void Log(object obj)
+			{
+				System.Console.WriteLine(obj);
+			}
+			protected override void LogWarning(object obj)
+			{
+				System.Console.WriteLine(obj);
+			}
+			protected override void LogError(object obj)
+			{
+				System.Console.WriteLine(obj);
+			}
+		}
+/*-------------------------------	Console type log end --------------------------------------------
+ * -------------------------------------------------------------------------------------------------*/
+
 
 
 
@@ -325,17 +494,19 @@ namespace Ltm
 			protected string GenFileName( string name, string ext = "txt")
 			{
 				string path = System.Environment.CurrentDirectory;
-				int idx = path.LastIndexOf('\\');
+				int idx = path.LastIndexOf(Path.DirectorySeparatorChar);
+
+			
 				string newFile;
 				string newPath;
 				if ( idx > 0 )
 				{
-					newPath = path + "\\Log\\";
+					newPath = path +Path.DirectorySeparatorChar + "Log" +Path.DirectorySeparatorChar;
 					newFile = newPath + name + "." + ext;
 				}
 				else
 				{
-					newPath = path + "Log\\" ;
+					newPath = path + "Log" +Path.DirectorySeparatorChar ;
 					newFile = newPath + name + "." + ext;
 				}
 				
